@@ -13,6 +13,11 @@ on:
         required: true
         default: "10.214.37.1"
         type: string
+      custom_ports:
+        description: "使用定制网口配置（WAN 用 PPPoE、LAN 直连网口；优先 2 个 2.5G 口，否则 eth0=WAN、eth1=LAN）"
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -55,6 +60,7 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
       LAN_IP: ${{ inputs.lan_ip }}
+      CUSTOM_PORTS: ${{ inputs.custom_ports }}
       RELEASE_TAG: x86-64-${{ inputs.version }}
     steps:
       - name: Checkout
@@ -75,7 +81,7 @@ jobs:
         run: sh build/fetch-extras.sh "$RUNNER_TEMP/extras"
 
       - name: 组装固件覆盖层
-        run: sh build/stage.sh "$RUNNER_TEMP/extras" "$LAN_IP" "$RUNNER_TEMP/files"
+        run: sh build/stage.sh "$RUNNER_TEMP/extras" "$LAN_IP" "$RUNNER_TEMP/files" "$CUSTOM_PORTS"
 
       - name: 构建固件
         run: |
@@ -112,8 +118,11 @@ jobs:
             echo
             echo "### 首次启动"
             echo
-            echo "- **恰好 2 个 2.5G 网口**：第 1 个为 WAN（PPPoE，在 **网络 → 接口 → wan** 填写账号密码），第 2 个直接作为 LAN，其余网口不分配。"
-            echo "- **其他机器**：eth0 为 LAN（br-lan），eth1 为 WAN（DHCP）。"
+            if [ "$CUSTOM_PORTS" = "true" ]; then
+              echo "- **网口：定制配置**：恰好有 2 个 2.5G 网口时用这两个，否则用 eth0、eth1。前一个为 WAN（PPPoE，在 **网络 → 接口 → wan** 填写账号密码），后一个直接作为 LAN，其余网口不分配；只有 1 个网口时保持官方布局。"
+            else
+              echo "- **网口：官方布局**：eth0 为 LAN（br-lan），eth1 为 WAN（DHCP）。"
+            fi
             echo "- 硬盘剩余空间（≥ 1 GiB）自动格式化为 ext4 并挂载到 \`/data\`，Docker 数据在 \`/data/docker\`。"
             echo "- 局域网不使用 IPv6；路由器 WAN 侧获取一个 IPv6 地址。"
             echo "- 初始化日志：\`logread -e custom-init\`"

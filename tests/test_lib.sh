@@ -39,6 +39,16 @@ assert_eq "" "$out" "10G 不算 2.5G"
 out=$(printf 'eth0 2500\neth1 10000\neth2 2500\n' | pick_2g5_ports) || fail "2.5G+10G+2.5G 应返回 0"
 assert_eq "eth0 eth2" "$out" "跳过 10G 口"
 
+# pick_custom_ports：恰好两个 2.5G 口时用它们，否则按顺序用前两个网口
+assert_eq "eth1 eth2" "$(printf 'eth0 1000\neth1 2500\neth2 2500\neth3 1000\n' | pick_custom_ports)" "两个 2.5G 口优先"
+assert_eq "eth0 eth2" "$(printf 'eth0 2500\neth1 10000\neth2 2500\n' | pick_custom_ports)" "10G 口不算 2.5G"
+assert_eq "eth0 eth1" "$(printf 'eth0 1000\neth1 2500\n' | pick_custom_ports)" "只有一个 2.5G 时按顺序"
+assert_eq "eth0 eth1" "$(printf 'eth0 2500\neth1 2500\neth2 2500\n' | pick_custom_ports)" "三个 2.5G 时按顺序"
+assert_eq "eth0 eth1" "$(printf 'eth0 0\neth1 0\n' | pick_custom_ports)" "虚拟网卡按顺序"
+out=$(printf 'eth0 2500\n' | pick_custom_ports) && fail "只有一个网口应返回 1"
+assert_eq "" "$out" "只有一个网口不输出"
+out=$(printf '' | pick_custom_ports) && fail "没有网口应返回 1"
+
 # part_name
 assert_eq "sda3" "$(part_name sda 3)" "sda"
 assert_eq "nvme0n1p3" "$(part_name nvme0n1 3)" "nvme"

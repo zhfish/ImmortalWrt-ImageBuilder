@@ -1,26 +1,43 @@
 #!/bin/sh
 # 首次启动：网口模式、WAN/LAN 与 IPv6（只在未初始化时执行）
 #
-# 接口定制模式：恰好有 2 个最高速率为 2.5G 的物理网口（1G、5G、10G 口都不算）
-#   第 1 个 2.5G 口 -> WAN：PPPoE，账号密码在 LuCI 中填写
-#   第 2 个 2.5G 口 -> LAN：直接使用该网口，不建 br-lan 网桥
-#   其余物理网口   -> 只启用链路（只有 IPv6 link-local 地址），不加入任何防火墙区域
-# 默认模式：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN 用 DHCP），只修改 LAN 地址
+# 接口定制模式：构建时在 Action 里勾选“使用定制网口配置”（CUSTOM_PORTS=1），且至少有 2 个物理网口
+#   WAN/LAN 网口：恰好有 2 个最高速率为 2.5G 的网口时用这两个（1G、5G、10G 口都不算），
+#                否则按顺序用前两个网口（eth0、eth1）
+#   WAN：PPPoE，账号密码在 LuCI 中填写
+#   LAN：直接使用该网口，不建 br-lan 网桥
+#   其余物理网口：只启用链路（只有 IPv6 link-local 地址），不加入任何防火墙区域
+# 默认模式（未勾选，或网口不足 2 个）：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN 用 DHCP），只修改 LAN 地址
 # 两种模式：只有路由器 WAN 侧获取一个 IPv6 地址，局域网不使用 IPv6
 . "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
 custom_is_provisioned && exit 0
 custom_load_conf
 
-ports=$(phys_ports)
-speeds=""
-for p in $ports; do
-	s=$(port_max_speed "$p")
-	custom_log "network: port $p $s"
-	speeds="$speeds$p $s
+mode=default
+if [ "${CUSTOM_PORTS:-0}" != 1 ]; then
+	reason="custom ports disabled in build"
+else
+	ports=$(phys_ports)
+	speeds=""
+	for p in $ports; do
+		s=$(port_max_speed "$p")
+		custom_log "network: port $p $s"
+		speeds="$speeds$p $s
 "
-done
+	done
+	if picked=$(printf '%s' "$speeds" | pick_custom_ports); then
+		mode=custom
+		if printf '%s' "$speeds" | pick_2g5_ports >/dev/null; then
+			why="the two 2.5G ports"
+		else
+			why="first two ports"
+		fi
+	else
+		reason="fewer than 2 physical ports"
+	fi
+fi
 
-if picked=$(printf '%s' "$speeds" | pick_2g5_ports); then
+if [ "$mode" = custom ]; then
 	# shellcheck disable=SC2086  # 有意拆成两个参数
 	set -- $picked
 	wan=$1
@@ -56,12 +73,12 @@ if picked=$(printf '%s' "$speeds" | pick_2g5_ports); then
 		uci -q set "network.$iface.device=$p"
 		uci -q set "network.$iface.proto=none"
 	done
-	custom_log "network: mode=custom wan=$wan lan=$lan"
+	custom_log "network: mode=custom wan=$wan lan=$lan ($why)"
 else
 	uci -q set network.lan.ipaddr="$LAN_IP"
 	uci -q set network.lan.netmask=255.255.255.0
 	uci -q set network.wan.peerdns=0
-	custom_log "network: mode=default"
+	custom_log "network: mode=default ($reason)"
 fi
 
 # IPv6：局域网不分配前缀、不用 ULA；WAN 只要地址不要前缀，不用运营商 DNS

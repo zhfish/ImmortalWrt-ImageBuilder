@@ -94,6 +94,14 @@ for p in luci-app-softethervpn dockerd docker luci-app-dockerman luci-app-openvp
 	assert_not_contains "$PK" " $p " "packages.txt 不应包含 $p"
 done
 
+# Action 勾选项 -> build.conf 中的 1/0
+assert_eq "1" "$(bool_flag true)" "true -> 1"
+assert_eq "0" "$(bool_flag false)" "false -> 0"
+assert_eq "1" "$(bool_flag 1)" "1 -> 1"
+assert_eq "0" "$(bool_flag 0)" "0 -> 0"
+bool_flag yes >/dev/null && fail "无法识别的值应返回 1"
+bool_flag "" >/dev/null && fail "空值应返回 1"
+
 # 模板渲染
 printf '{"dns": ["@LAN_IP@"], "x": "@LAN_IP@"}\n' > "$T/t.in"
 render_template "$T/t.in" "$T/t.out" 10.1.2.1

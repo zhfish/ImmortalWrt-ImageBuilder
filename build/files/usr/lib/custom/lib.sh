@@ -70,6 +70,17 @@ pick_2g5_ports() {
 	awk '$2 == 2500 { p[++n] = $1 } END { if (n != 2) exit 1; print p[1], p[2] }'
 }
 
+# 定制网口模式选 WAN/LAN。标准输入同 pick_2g5_ports。
+# 恰好两个 2.5G 口时用它们，否则按顺序用前两个网口，输出 "<wan> <lan>"；不足两个网口返回 1
+pick_custom_ports() {
+	awk '{ name[++n] = $1 } $2 == 2500 { p[++m] = $1 }
+		END {
+			if (m == 2) { print p[1], p[2]; exit 0 }
+			if (n < 2) exit 1
+			print name[1], name[2]
+		}'
+}
+
 # 分区设备名：sda 3 -> sda3；nvme0n1 3 -> nvme0n1p3
 part_name() {
 	case "$1" in

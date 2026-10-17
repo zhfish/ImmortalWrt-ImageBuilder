@@ -14,7 +14,7 @@ nftables-only、集成最新 Docker + DPanel、首次启动自动完成数据盘
 
 - Actions 页面只需填 2 个参数即可产出固件并发布 Release。
 - 刷入后首次启动无需手动干预：`/data` 已挂载、Docker 与 DPanel 已运行、macvlan 网络与 shim 已就绪。
-- 在“恰好 2 个 2.5G 网口”的机器上自动进入接口定制模式；其他机器保持官方默认网口布局。
+- Action 勾选“使用定制网口配置”（默认）时进入接口定制模式（优先 2 个 2.5G 口，否则 eth0/eth1）；不勾选时保持官方默认网口布局。
 - 固件中不含 dropbear、iptables-legacy / xtables-legacy；构建时自动校验。
 
 ## 2. Action 输入
@@ -23,6 +23,7 @@ nftables-only、集成最新 Docker + DPanel、首次启动自动完成数据盘
 | --- | --- | --- |
 | `version` 版本号 | `25.12.2` | `^[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$`，且对应的 `immortalwrt/imagebuilder:x86-64-openwrt-<version>` 镜像存在 |
 | `lan_ip` LAN 地址 | `10.214.37.1` | 必须为 `x.x.x.1`，各段 ≤ 255；掩码固定 /24 |
+| `custom_ports` 使用定制网口配置 | 勾选 | 布尔值，写入 `/etc/custom/build.conf` 的 `CUSTOM_PORTS=1/0` |
 
 下文以 `P` 表示 LAN 前缀（例：`10.214.37`），`P.1` 即 LAN 地址。
 
@@ -151,13 +152,17 @@ combined-efi 镜像为 GPT + BIOS boot 分区，UEFI 与传统 BIOS 均可启动
 
 **网口识别**：遍历 `/sys/class/net/*`，只取物理以太网口（存在 `device`、`type=1`、非无线）。用 `ethtool` 解析 `Supported link modes`，取最高速率；**最高速率恰好 2500 Mb/s** 才算 2.5G 口（10G 口不算，1G 口忽略）。按 ethN 编号排序。
 
-**接口定制模式**（恰好 2 个 2.5G 口）：
-- 第 1 个 2.5G 口 → `wan`：`proto=pppoe`，用户名密码留空（LuCI 中填写），`ipv6=1`，`peerdns=0`。
+开关：`CUSTOM_PORTS=1`（Action 勾选“使用定制网口配置”）且至少 2 个物理网口时进入接口定制模式；`CUSTOM_PORTS` 为 0 或缺失时不做网口识别，直接用默认模式。
+
+**选网口**（`pick_custom_ports`）：恰好 2 个 2.5G 口时用这两个，否则按顺序用前两个物理网口（eth0、eth1）。
+
+**接口定制模式**：
+- 前一个网口 → `wan`：`proto=pppoe`，用户名密码留空（LuCI 中填写），`ipv6=1`，`peerdns=0`。
 - `wan6`：`proto=dhcpv6`，`device=@wan`，`reqaddress=try`，`reqprefix=no`，`peerdns=0`。
-- 第 2 个 2.5G 口 → `lan`：直接作为设备，删除 `br-lan` 网桥；`P.1/24`。
+- 后一个网口 → `lan`：直接作为设备，删除 `br-lan` 网桥；`P.1/24`。
 - 其余物理网口：各建一个 `proto=none` 接口（链路 up，只有内核自动生成的 IPv6 link-local），不加入任何防火墙区域（fw4 默认 input REJECT）。
 
-**默认模式**（其他情况）：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN DHCP），只修改：
+**默认模式**（未勾选，或物理网口不足 2 个）：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN DHCP），只修改：
 - `lan` 地址 `P.1/24`；`wan.peerdns=0`；`wan6.reqprefix=no`、`peerdns=0`。
 
 **IPv6（两种模式相同）**：只有路由器 WAN 侧获取 v6 地址；局域网不使用 v6：
@@ -253,7 +258,7 @@ docker network create -d macvlan \
 
 - 所有首次启动脚本通过 `logger -t custom-init` 记录每个决策（识别到的网口及速率、选择的模式、分区结果），用 `logread -e custom-init` 查看。
 - 数据盘任一步骤失败：记录错误，不中断其余初始化；Docker 仍可启动（数据落在 rootfs）。
-- 网口识别失败（如缺 ethtool 输出）：按默认模式处理。
+- 网口速率识别失败（如缺 ethtool 输出）：速率记为 0，定制模式下按顺序用 eth0/eth1。
 - 构建侧：下载失败、版本解析失败、manifest 校验失败都直接让 workflow 失败，并给出明确的 `::error::` 信息。
 
 ## 11. 测试
