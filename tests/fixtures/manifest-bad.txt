@@ -1,0 +1,6 @@
+base-files 1678~4fbfc0e3d1
+curl 8.19.0-r2
+dropbear 2025.89-r3
+dnsmasq-full 2.93-r1
+luci-i18n-nut-zh-cn 26.236.50544~cb5d434
+openssh-server 10.3_p1-r1

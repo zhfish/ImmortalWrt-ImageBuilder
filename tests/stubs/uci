@@ -1,0 +1,58 @@
+#!/bin/sh
+# 测试用的伪 uci。状态保存在 $UCI_STATE，每行一个 key=value；
+# 列表的每一项是一行同名 key；section 行形如 pkg.sec=type。
+# 除 get/show 外的调用都追加到 $UCI_LOG，供测试断言“是否写过配置”。
+: "${UCI_STATE:?UCI_STATE not set}"
+
+[ "$1" = "-q" ] && shift
+cmd=$1
+shift
+
+case "$cmd" in
+	get | show) ;;
+	*) echo "$cmd $*" >> "${UCI_LOG:-/dev/null}" ;;
+esac
+
+# 过滤状态文件：去掉满足 awk 条件的行
+filter_state() {
+	awk -v k="$1" -v line="$2" "$3" "$UCI_STATE" > "$UCI_STATE.tmp" && mv "$UCI_STATE.tmp" "$UCI_STATE"
+}
+
+case "$cmd" in
+	get)
+		awk -v k="$1" '
+			index($0, k "=") == 1 { v = substr($0, length(k) + 2); out = n++ ? out " " v : v }
+			END { if (!n) exit 1; print out }' "$UCI_STATE"
+		;;
+	set)
+		key=${1%%=*}
+		filter_state "$key" "" '!(index($0, k "=") == 1)'
+		# 与真实 uci 一致：值为空时等同于删除该选项
+		[ -n "${1#*=}" ] && echo "$1" >> "$UCI_STATE"
+		;;
+	delete)
+		filter_state "$1" "" '!(index($0, k "=") == 1 || index($0, k ".") == 1)'
+		;;
+	add_list)
+		echo "$1" >> "$UCI_STATE"
+		;;
+	del_list)
+		filter_state "" "$1" '$0 != line'
+		;;
+	add)
+		n=0
+		while awk -v k="$1.@$2[$n]=" 'index($0, k) == 1 { f = 1 } END { exit !f }' "$UCI_STATE"; do
+			n=$((n + 1))
+		done
+		echo "$1.@$2[$n]=$2" >> "$UCI_STATE"
+		echo "cfg$n"
+		;;
+	show)
+		awk -v k="$1" 'index($0, k ".") == 1 || index($0, k "=") == 1' "$UCI_STATE"
+		;;
+	commit | revert) ;;
+	*)
+		echo "fake uci: unsupported command '$cmd'" >&2
+		exit 2
+		;;
+esac

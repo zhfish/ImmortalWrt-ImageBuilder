@@ -1,0 +1,11 @@
+{
+  "data-root": "/data/docker",
+  "firewall-backend": "nftables",
+  "log-level": "warn",
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "100m",
+    "max-file": "5"
+  },
+  "dns": ["@LAN_IP@"]
+}

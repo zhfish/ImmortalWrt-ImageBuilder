@@ -1,0 +1,30 @@
+## ImageBuilder 镜像配置覆盖片段（x86-64）
+## 构建时 build/build.sh 把这里的每一项覆盖到 ImageBuilder 自带的 .config 上，其余保持官方默认。
+## 写法与 .config 相同：开启 CONFIG_XXX=y，赋值 CONFIG_XXX="值"，关闭 # CONFIG_XXX is not set。
+## 以 "##" 开头的是说明，必须单独占一行。
+## 注意：CONFIG_PACKAGE_xxx 在 ImageBuilder 中无效，增删软件包请改 build/packages.txt。
+
+## ---------- 根文件系统 ----------
+## squashfs：只读系统 + 可写 overlay，支持恢复出厂设置
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+# CONFIG_TARGET_ROOTFS_EXT4FS is not set
+# CONFIG_TARGET_ROOTFS_TARGZ is not set
+
+## ---------- 引导：只生成 UEFI 镜像 ----------
+## combined-efi 镜像同时带有 BIOS 引导分区，传统 BIOS 也能启动
+# CONFIG_GRUB_IMAGES is not set
+CONFIG_GRUB_EFI_IMAGES=y
+## GRUB 菜单等待秒数
+CONFIG_GRUB_TIMEOUT="3"
+
+## ---------- 输出格式 ----------
+CONFIG_TARGET_IMAGES_GZIP=y
+# CONFIG_ISO_IMAGES is not set
+# CONFIG_QCOW2_IMAGES is not set
+# CONFIG_VDI_IMAGES is not set
+# CONFIG_VMDK_IMAGES is not set
+# CONFIG_VHDX_IMAGES is not set
+
+## ---------- 分区大小 ----------
+## 根分区（系统 + 软件包 + 配置）4 GiB，硬盘剩余空间首次启动时做成 /data
+CONFIG_TARGET_ROOTFS_PARTSIZE=4096

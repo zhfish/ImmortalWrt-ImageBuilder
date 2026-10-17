@@ -1,0 +1,74 @@
+#!/bin/sh
+# 首次启动：网口模式、WAN/LAN 与 IPv6（只在未初始化时执行）
+#
+# 接口定制模式：恰好有 2 个最高速率为 2.5G 的物理网口（1G、5G、10G 口都不算）
+#   第 1 个 2.5G 口 -> WAN：PPPoE，账号密码在 LuCI 中填写
+#   第 2 个 2.5G 口 -> LAN：直接使用该网口，不建 br-lan 网桥
+#   其余物理网口   -> 只启用链路（只有 IPv6 link-local 地址），不加入任何防火墙区域
+# 默认模式：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN 用 DHCP），只修改 LAN 地址
+# 两种模式：只有路由器 WAN 侧获取一个 IPv6 地址，局域网不使用 IPv6
+. "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
+custom_is_provisioned && exit 0
+custom_load_conf
+
+ports=$(phys_ports)
+speeds=""
+for p in $ports; do
+	s=$(port_max_speed "$p")
+	custom_log "network: port $p $s"
+	speeds="$speeds$p $s
+"
+done
+
+if picked=$(printf '%s' "$speeds" | pick_2g5_ports); then
+	# shellcheck disable=SC2086  # 有意拆成两个参数
+	set -- $picked
+	wan=$1
+	lan=$2
+
+	# LAN 直接使用网口，删除 br-lan 网桥
+	i=0
+	while name=$(uci -q get "network.@device[$i].name"); do
+		if [ "$name" = br-lan ]; then
+			uci -q delete "network.@device[$i]"
+			break
+		fi
+		i=$((i + 1))
+	done
+	uci -q set network.lan.device="$lan"
+	uci -q set network.lan.proto=static
+	uci -q set network.lan.ipaddr="$LAN_IP"
+	uci -q set network.lan.netmask=255.255.255.0
+
+	uci -q set network.wan.device="$wan"
+	uci -q set network.wan.proto=pppoe
+	uci -q set network.wan.ipv6=1
+	uci -q set network.wan.peerdns=0
+	uci -q set network.wan6.device=@wan
+	uci -q set network.wan6.proto=dhcpv6
+
+	for p in $ports; do
+		if [ "$p" = "$wan" ] || [ "$p" = "$lan" ]; then
+			continue
+		fi
+		iface="ll_$(printf '%s' "$p" | tr -c 'a-zA-Z0-9_' '_')"
+		uci -q set "network.$iface=interface"
+		uci -q set "network.$iface.device=$p"
+		uci -q set "network.$iface.proto=none"
+	done
+	custom_log "network: mode=custom wan=$wan lan=$lan"
+else
+	uci -q set network.lan.ipaddr="$LAN_IP"
+	uci -q set network.lan.netmask=255.255.255.0
+	uci -q set network.wan.peerdns=0
+	custom_log "network: mode=default"
+fi
+
+# IPv6：局域网不分配前缀、不用 ULA；WAN 只要地址不要前缀，不用运营商 DNS
+uci -q delete network.lan.ip6assign
+uci -q delete network.globals.ula_prefix
+uci -q set network.wan6.reqaddress=try
+uci -q set network.wan6.reqprefix=no
+uci -q set network.wan6.peerdns=0
+uci commit network
+exit 0

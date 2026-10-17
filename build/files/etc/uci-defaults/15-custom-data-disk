@@ -1,0 +1,75 @@
+#!/bin/sh
+# 首次启动：把系统盘剩余空间做成 ext4 数据分区，挂载到 /data。
+# 文件名排在 fstools 的 10-fstab 之后：它负责创建 /etc/config/fstab，之前 uci 无法写入 fstab。
+# 每次刷机后都会执行（幂等）：
+#   - fstab 里已有 /data：什么都不做，由 block mount 负责挂载
+#   - 系统盘上已有卷标为 data 的分区：直接复用
+#   - 新建的分区上已有文件系统（重刷固件后分区表被覆盖，数据还在）：不格式化
+# 任何一步失败都只记日志，/data 退化为 rootfs 上的普通目录。
+. "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
+. "${CUSTOM_LIBDIR:-/usr/lib/custom}/datadisk.sh"
+
+DATA_MIN_BYTES=1073741824 # 剩余空间至少 1 GiB 才建分区
+
+data_setup() {
+	if uci -q get fstab.data >/dev/null; then
+		custom_log "data: fstab already has /data"
+		return 0
+	fi
+
+	# 找到系统盘（x86 的 sysupgrade 也用这两个函数），export_partdevice 把磁盘名写入 disk
+	. /lib/upgrade/common.sh
+	disk=
+	if ! export_bootdevice || ! export_partdevice disk 0; then
+		custom_log "data: cannot determine the boot disk"
+		return 1
+	fi
+
+	part=$(datadisk_find_label "$disk")
+	if [ -n "$part" ]; then
+		custom_log "data: reusing /dev/$part"
+	else
+		if ! nr=$(datadisk_new_partition "/dev/$disk" "$DATA_MIN_BYTES"); then
+			custom_log "data: less than 1 GiB free on /dev/$disk, skipped"
+			return 1
+		fi
+		part=$(part_name "$disk" "$nr")
+		# 磁盘正在使用，不能整表重读，只把新分区告诉内核
+		partx --add --nr "$nr" "/dev/$disk" 2>/dev/null
+		i=0
+		while [ ! -b "/dev/$part" ] && [ "$i" -lt 5 ]; do
+			sleep 1
+			i=$((i + 1))
+		done
+		if [ ! -b "/dev/$part" ]; then
+			custom_log "data: created partition $nr but /dev/$part did not appear"
+			return 1
+		fi
+		custom_log "data: created /dev/$part"
+	fi
+
+	if block info "/dev/$part" | grep -q ' TYPE="'; then
+		custom_log "data: /dev/$part already has a filesystem, not formatting"
+	elif ! mkfs.ext4 -q -F -L data "/dev/$part"; then
+		custom_log "data: mkfs.ext4 /dev/$part failed"
+		return 1
+	fi
+
+	uuid=$(block info "/dev/$part" | sed -n 's/.* UUID="\([^"]*\)".*/\1/p')
+	if [ -z "$uuid" ]; then
+		custom_log "data: cannot read UUID of /dev/$part"
+		return 1
+	fi
+
+	uci -q set fstab.data=mount
+	uci -q set fstab.data.target=/data
+	uci -q set fstab.data.uuid="$uuid"
+	uci -q set fstab.data.enabled=1
+	uci commit fstab
+	block mount
+	custom_log "data: /dev/$part (UUID=$uuid) mounted on /data"
+}
+
+data_setup
+mkdir -p /data/docker /data/dpanel
+exit 0

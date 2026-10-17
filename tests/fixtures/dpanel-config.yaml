@@ -1,0 +1,53 @@
+app:
+  name: ${APP_NAME-dpanel}
+  version: ${APP_VERSION}
+  env: ${APP_ENV-lite}
+  family: ${APP_FAMILY-ce}
+  server: ${APP_SERVER-http}
+  cors:
+    - http://localhost:8000
+server:
+  http:
+    host: ${APP_SERVER_HOST-0.0.0.0}
+    port: ${APP_SERVER_PORT-8086}
+    socket: ${APP_SERVER_SOCKET}
+  prof:
+    host: 0.0.0.0
+    port: 8087
+log:
+  default:
+    driver: stack
+    channels:
+      - file
+      - console
+  file:
+    driver: file
+    path: ${DP_SYSTEM_STORAGE_LOCAL_PATH}/logs/dpanel.log
+    level: ${DP_LOG_FILE_LEVEL-info}
+  console:
+    driver: console
+    level: ${DP_LOG_CONSOLE_LEVEL-debug}
+database:
+  default:
+    driver: sqlite
+    user_name: ${DB_USERNAME-root}
+    password: ${DB_PASSWORD-123456}
+    db_name: ${DP_SYSTEM_STORAGE_LOCAL_PATH}/dpanel.db
+    charset: utf8mb4
+    prefix: ims_
+    options:
+      mode: ${DP_DB_MODE-rwc}
+      _journal_mode: ${DP_DB_JOURNAL-DELETE} # WAL
+system:
+  baseurl: ${DP_SYSTEM_BASEURL}
+  entrance: ${DP_SYSTEM_ENTRANCE}
+  storage:
+    local:
+      path: ${DP_SYSTEM_STORAGE_LOCAL_PATH}
+  permission:
+    default_username: __public__
+  rsa:
+    key: ${DP_SYSTEM_STORAGE_LOCAL_PATH}/cert/rsa/id_rsa
+    pub: ${DP_SYSTEM_STORAGE_LOCAL_PATH}/cert/rsa/id_rsa.pub
+asusnw:
+  gui_theme: ${DP_GUI_THEME-dark} # rog_1 | rog_2 | dark | light

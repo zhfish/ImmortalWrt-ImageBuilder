@@ -1,0 +1,158 @@
+name: Build ImmortalWrt x86-64
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "ImmortalWrt 版本号"
+        required: true
+        default: "25.12.2"
+        type: string
+      lan_ip:
+        description: "LAN 地址（必须是 x.x.x.1，掩码 /24）"
+        required: true
+        default: "10.214.37.1"
+        type: string
+
+permissions:
+  contents: write
+
+# 同一版本同时只跑一个构建，避免互相覆盖 Release
+concurrency:
+  group: build-x86-64-${{ inputs.version }}
+
+jobs:
+  test:
+    name: 脚本检查与测试
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          shellcheck -s sh -S warning \
+            build/*.sh tests/*.sh tests/stubs/* \
+            build/files/etc/uci-defaults/* \
+            build/files/usr/lib/custom/*.sh \
+            build/files/usr/libexec/custom/*.sh
+          # procd 服务脚本：USE_PROCD/START/STOP 由 /etc/rc.common 读取
+          shellcheck -s sh -S warning -e SC2034 build/files/etc/init.d/*
+
+      # Ubuntu 的 sh 是 dash；这里有 sfdisk，会真实演练数据分区
+      - name: 测试（dash）
+        run: sh tests/run.sh
+
+      # 固件里的 shell 是 BusyBox ash
+      - name: 测试（BusyBox）
+        run: docker run --rm -v "$PWD:/w" -w /w busybox:1.36 sh tests/run.sh
+
+  build:
+    name: 构建固件
+    needs: test
+    runs-on: ubuntu-24.04
+    env:
+      VERSION: ${{ inputs.version }}
+      LAN_IP: ${{ inputs.lan_ip }}
+      RELEASE_TAG: x86-64-${{ inputs.version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: 校验输入
+        run: |
+          sh build/validate-inputs.sh "$VERSION" "$LAN_IP"
+          image="immortalwrt/imagebuilder:x86-64-openwrt-$VERSION"
+          if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+            echo "::error::找不到 ImageBuilder 镜像 $image，请确认版本号"
+            exit 1
+          fi
+
+      - name: 下载 Docker、Compose、DPanel、timecontrol
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh build/fetch-extras.sh "$RUNNER_TEMP/extras"
+
+      - name: 组装固件覆盖层
+        run: sh build/stage.sh "$RUNNER_TEMP/extras" "$LAN_IP" "$RUNNER_TEMP/files"
+
+      - name: 构建固件
+        run: |
+          mkdir -p bin
+          docker run --rm --user root \
+            -v "$GITHUB_WORKSPACE/bin:/home/build/immortalwrt/bin" \
+            -v "$RUNNER_TEMP/files:/staging/files:ro" \
+            -v "$RUNNER_TEMP/extras/apk:/extra/apk:ro" \
+            -v "$GITHUB_WORKSPACE/build/build.sh:/home/build/immortalwrt/build.sh:ro" \
+            -v "$GITHUB_WORKSPACE/build/config.override:/home/build/immortalwrt/config.override:ro" \
+            -v "$GITHUB_WORKSPACE/build/packages.txt:/home/build/immortalwrt/packages.txt:ro" \
+            "immortalwrt/imagebuilder:x86-64-openwrt-$VERSION" \
+            bash /home/build/immortalwrt/build.sh
+
+      # 把固件放进 8 GiB 的磁盘文件，运行固件里同一份分区函数，确认 /data 分区能正确建出
+      - name: 演练数据分区
+        run: sh build/smoke-datadisk.sh bin/targets/x86/64/*-squashfs-combined-efi.img.gz
+
+      - name: 生成校验和与 Release 说明
+        run: |
+          . "$RUNNER_TEMP/extras/versions.env"
+          out=bin/targets/x86/64
+          img=$(basename "$out"/*-squashfs-combined-efi.img.gz)
+          manifest=$(ls "$out"/*.manifest)
+          (cd "$out" && sha256sum "$img") > sha256sums.txt
+          p=${LAN_IP%.*}
+          {
+            echo "## ImmortalWrt ${VERSION} x86-64（UEFI）"
+            echo
+            echo "- 构建时间：$(TZ=Asia/Shanghai date '+%Y-%m-%d %H:%M')（北京时间）"
+            echo "- 管理地址：http://${LAN_IP}，用户名 \`root\`，密码为空（请先在 **系统 → 管理权** 设置密码，SSH 才能登录）"
+            echo "- DPanel：http://${LAN_IP}:8086（或 LuCI 菜单 **服务 → DPanel**）"
+            echo "- 组件：Docker ${DOCKER_VERSION}、Docker Compose ${COMPOSE_VERSION}、DPanel ${DPANEL_VERSION}、timecontrol ${TIMECONTROL_VERSION}"
+            echo
+            echo "### 首次启动"
+            echo
+            echo "- **恰好 2 个 2.5G 网口**：第 1 个为 WAN（PPPoE，在 **网络 → 接口 → wan** 填写账号密码），第 2 个直接作为 LAN，其余网口不分配。"
+            echo "- **其他机器**：eth0 为 LAN（br-lan），eth1 为 WAN（DHCP）。"
+            echo "- 硬盘剩余空间（≥ 1 GiB）自动格式化为 ext4 并挂载到 \`/data\`，Docker 数据在 \`/data/docker\`。"
+            echo "- 局域网不使用 IPv6；路由器 WAN 侧获取一个 IPv6 地址。"
+            echo "- 初始化日志：\`logread -e custom-init\`"
+            echo
+            echo "### 地址规划"
+            echo
+            echo "| 地址 | 用途 |"
+            echo "| --- | --- |"
+            echo "| ${p}.1 | 路由器 |"
+            echo "| ${p}.2 – ${p}.7 | 固定 IP 的 macvlan 容器（\`--ip\`；${p}.2 为 kexue 标签的网关） |"
+            echo "| ${p}.8 – ${p}.15 | macvlan 容器自动分配（网络 \`lan_macvlan\`） |"
+            echo "| ${p}.50 – ${p}.200 | DHCP 地址池 |"
+            echo "| ${p}.16 – ${p}.49、${p}.201 – ${p}.254 | 有线设备静态 IP |"
+            echo
+            echo "### 文件"
+            echo
+            echo "| 文件 | 用途 |"
+            echo "| --- | --- |"
+            echo "| \`${img}\` | 写入硬盘或导入虚拟机，UEFI 与传统 BIOS 均可启动 |"
+            echo "| \`sha256sums.txt\` | 校验和 |"
+            echo
+            echo "<details><summary>固件中的软件包（$(wc -l < "$manifest") 个）</summary>"
+            echo
+            echo '```'
+            cat "$manifest"
+            echo '```'
+            echo
+            echo "</details>"
+          } > release-notes.md
+          cat release-notes.md
+
+      # 每个版本只保留最新一次构建：删掉旧的 Release 和 tag 后重新创建
+      - name: 发布 Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "ImmortalWrt $VERSION x86-64" \
+            --notes-file release-notes.md \
+            bin/targets/x86/64/*-squashfs-combined-efi.img.gz \
+            sha256sums.txt

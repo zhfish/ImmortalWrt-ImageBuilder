@@ -1,0 +1,8 @@
+#!/bin/sh
+# 测试用的伪 ethtool：输出 $ETHTOOL_DIR/<网口> 中预置的样本
+f="${ETHTOOL_DIR:?ETHTOOL_DIR not set}/$1"
+if [ ! -f "$f" ]; then
+	echo "netlink error: No such device" >&2
+	exit 1
+fi
+cat "$f"

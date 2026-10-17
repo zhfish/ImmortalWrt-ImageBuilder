@@ -1,0 +1,9 @@
+Settings for eth0:
+	Supported ports: [  ]
+	Supported link modes:   Not reported
+	Supported pause frame use: No
+	Supports auto-negotiation: No
+	Supported FEC modes: Not reported
+	Advertised link modes:  Not reported
+	Speed: Unknown!
+	Link detected: yes

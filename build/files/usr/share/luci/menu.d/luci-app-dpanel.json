@@ -1,0 +1,10 @@
+{
+	"admin/services/dpanel": {
+		"title": "DPanel",
+		"order": 90,
+		"action": {
+			"type": "view",
+			"path": "dpanel"
+		}
+	}
+}

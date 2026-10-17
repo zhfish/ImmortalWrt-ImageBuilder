@@ -1,0 +1,54 @@
+## ImageBuilder 配置覆盖片段（x86-64，ImmortalWrt 25.12.x）
+##
+## 构建时 build25.sh 会把这里的每一项覆盖到 ImageBuilder 自带的 .config 上，
+## 其余配置保持官方默认，所以切换 25.12 小版本也不会出现配置错位。
+##
+## 写法（与 OpenWrt .config 相同）：
+##   开启：CONFIG_XXX=y
+##   赋值：CONFIG_XXX="值"   或   CONFIG_XXX=数字
+##   关闭：# CONFIG_XXX is not set
+## 以 "##" 开头的是说明，会被忽略。说明必须单独占一行，不要写在配置项后面。
+##
+## 注意：ImageBuilder 只读取与"生成镜像"相关的配置。CONFIG_PACKAGE_xxx 这类
+## 软件包开关在这里不起作用，增删软件包请改 shell/apk-custom-packages.sh。
+
+
+## ---------- 根文件系统 ----------
+## squashfs：只读系统 + 可写 overlay，支持"恢复出厂设置"，推荐
+CONFIG_TARGET_ROOTFS_SQUASHFS=y
+## ext4：整个分区可写但无法恢复出厂，本项目不生成
+# CONFIG_TARGET_ROOTFS_EXT4FS is not set
+## rootfs.tar.gz：给 Docker/LXC 用的根文件系统包，本项目不上传，不生成以节省时间
+# CONFIG_TARGET_ROOTFS_TARGZ is not set
+
+
+## ---------- 引导方式 ----------
+## 纯 BIOS 镜像（combined.img.gz）不生成：
+## combined-efi 镜像同时写入了 BIOS 引导代码，传统 BIOS 主板也能启动
+# CONFIG_GRUB_IMAGES is not set
+## UEFI 镜像（combined-efi.img.gz），本项目的主要产物
+CONFIG_GRUB_EFI_IMAGES=y
+## GRUB 菜单等待秒数，"0" 表示直接启动（官方默认也是 "0"）
+CONFIG_GRUB_TIMEOUT="0"
+## GRUB 菜单里显示的系统名称
+CONFIG_GRUB_TITLE="ImmortalWrt"
+
+
+## ---------- 输出格式 ----------
+## 镜像用 gzip 压缩（.img.gz）
+CONFIG_TARGET_IMAGES_GZIP=y
+## Live ISO（image-efi.iso）：可刻录到 U 盘或挂到虚拟机直接启动，
+## 同时支持 BIOS 和 UEFI；系统运行在光盘介质上，重启后配置不保留
+CONFIG_ISO_IMAGES=y
+## 各种虚拟机磁盘格式，需要时改成 =y（PVE/ESXi 也可以直接导入 img）
+# CONFIG_QCOW2_IMAGES is not set
+# CONFIG_VDI_IMAGES is not set
+# CONFIG_VMDK_IMAGES is not set
+# CONFIG_VHDX_IMAGES is not set
+
+
+## ---------- 分区大小 ----------
+## 内核分区（MB），x86 官方默认就是 32，显式写出方便调整
+CONFIG_TARGET_KERNEL_PARTSIZE=32
+## 根分区（软件包空间）大小（MB），固定 4G
+CONFIG_TARGET_ROOTFS_PARTSIZE=4096

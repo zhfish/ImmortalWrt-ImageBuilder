@@ -1,0 +1,5 @@
+{
+  "data-root": "/opt/docker/",
+  "log-level": "warn",
+  "firewall-backend": "nftables"
+}

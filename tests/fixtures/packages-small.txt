@@ -1,0 +1,6 @@
+# 测试用的小清单
+-dropbear -dnsmasq
+curl   openssh-server   # 行尾注释
+ethtool
+
+luci-i18n-nut-zh-cn

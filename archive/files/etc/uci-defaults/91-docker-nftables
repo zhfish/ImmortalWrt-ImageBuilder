@@ -1,0 +1,15 @@
+#!/bin/sh
+# 让 Docker 使用 nftables 防火墙后端（Docker 29 起支持，目前为实验性功能）。
+#
+# 设置 alt_config_file 后，dockerd 启动脚本直接使用 /etc/docker/daemon.json，
+# 不再根据 /etc/config/dockerd 生成配置，也不会再用 iptables 添加 DOCKER-USER 拦截规则。
+# 注意：此后 Docker 的设置（数据目录、镜像加速等）请直接修改 /etc/docker/daemon.json，
+#       LuCI 里 Docker 设置页的修改不再生效。
+#
+# 想恢复默认的 iptables-nft 后端：
+#   uci delete dockerd.globals.alt_config_file
+#   uci commit dockerd
+#   /etc/init.d/dockerd restart
+
+uci -q set dockerd.globals.alt_config_file='/etc/docker/daemon.json' && uci commit dockerd
+exit 0

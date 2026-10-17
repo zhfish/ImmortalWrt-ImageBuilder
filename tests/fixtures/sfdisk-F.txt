@@ -1,0 +1,7 @@
+Unpartitioned space /dev/sda: 3.94 GiB, 4226791936 bytes, 8255488 sectors
+Units: sectors of 1 * 512 = 512 bytes
+Sector size (logical/physical): 512 bytes / 512 bytes
+
+  Start      End Sectors  Size
+     34      511     478  239K
+8521728 16777182 8255455  3.9G

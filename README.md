@@ -1,144 +1,103 @@
-# [新手指导](https://github.com/wukongdaily/AutoBuildImmortalWrt/wiki) 👈🏻
-# ImmortalWrt-ImageBuilder
+# ImmortalWrt-ImageBuilder（x86-64 软路由）
 
-**⚠️ 重要声明**
+用 GitHub Actions 和 ImmortalWrt 官方 ImageBuilder 打包一个 **x86-64 UEFI** 固件：只用 nftables，集成最新 Docker 与 DPanel，首次启动自动完成数据盘、网口、DNS/DHCP、Docker macvlan 的配置。不从源码编译，几分钟出一个固件。
 
-> **本项目为个人独立维护的第三方项目(脚本)，与 ImmortalWrt 官方没有关联。** <br>
-> **项目中使用了 ImmortalWrt 官方 ImageBuilder 工具打包生成固件。<br>
-> 但用户自行定制产生的任何 bug，均不代表 ImmortalWrt 官方固件的 bug**<br>
-> **为了不给 ImmortalWrt 上游维护者增加额外负担和麻烦，所有相关问题请勿在 ImmortalWrt 群内反馈**。  <br>
-> **建议各位在本项目 [Discussions](https://github.com/wukongdaily/ImmortalWrt-ImageBuilder/discussions) 中提问或讨论**
+> 与 ImmortalWrt 官方无关，自定义固件的问题请不要去官方渠道反馈。
+> 旧版本的工作流与脚本保存在 [archive/](archive/)，只作参考，不参与构建。
 
+## 使用方法
 
----
+1. Fork 本仓库。
+2. 打开 **Actions → Build ImmortalWrt x86-64 → Run workflow**，填写参数后运行。
+3. 构建完成后到 **Releases** 下载，每个版本一个 Release（如 `x86-64-25.12.2`），只保留最新一次构建。
 
-[![GitHub](https://img.shields.io/github/license/wukongdaily/AutoBuildImmortalWrt.svg?label=LICENSE&logo=github&logoColor=%20)](https://github.com/wukongdaily/AutoBuildImmortalWrt/blob/master/LICENSE)
-![GitHub Stars](https://img.shields.io/github/stars/wukongdaily/AutoBuildImmortalWrt.svg?style=flat&logo=appveyor&label=Stars&logo=github)
-![GitHub Forks](https://img.shields.io/github/forks/wukongdaily/AutoBuildImmortalWrt.svg?style=flat&logo=appveyor&label=Forks&logo=github)
+| 参数 | 默认值 | 说明 |
+| --- | --- | --- |
+| 版本号 | `25.12.2` | 需要有对应的 `immortalwrt/imagebuilder:x86-64-openwrt-<版本>` 镜像 |
+| LAN 地址 | `10.214.37.1` | 必须是 `x.x.x.1`，掩码 /24 |
 
-## 🤔 这是什么？
-基于 CI 的 ImageBuilder 工作流，用于自动化构建 ImmortalWrt 固件。
-> 1、支持自定义固件大小 默认1GB 不建议设置过大 推荐1G-2G 更大需求可通过自定义插件里的扩容插件自行扩容<br>
-> 2、支持可选预安装docker（可选）支持在UI上勾选是否集成商店 （24.10.6以下）<br>
-> 3、支持按需增加[第三方软件](https://github.com/wukongdaily/store/blob/master/README.md)  如何集成 https://github.com/wukongdaily/AutoBuildImmortalWrt/discussions/209 <br>
-> 4、点击这里查看👉🏻[全部支持的机型列表](https://github.com/wukongdaily/AutoBuildImmortalWrt/blob/master/SUPPORT.md) 👈🏻<br>
-> 5、在UI上 新增luci版本的可选项，默认最新版25.12.x https://github.com/wukongdaily/AutoBuildImmortalWrt/discussions/426<br>
-> 6、支持设置管理地址的ip 比如192.168.100.1 这里强调 这项功能仅针对多网口机型 单网口的逻辑还是自动获取ip模式（dhcp）无固定ip<br>
-> 7、对于[插件追新的用户 建议前往run项目 下载run后 ](https://github.com/wukongdaily/RunFilesBuilder/discussions/41)用命令sh xx.run 覆盖安装 <br>
-> 8、支持24.10.x 、25.12.x 等版本 （包括x86-64-ISO、x86-64、rockchip、全志sunxi、无线路由器）
+产物只有一个 `*-squashfs-combined-efi.img.gz`：写入硬盘或导入虚拟机，UEFI 和传统 BIOS 都能启动。GRUB 菜单等待 3 秒，根分区 4 GiB。
 
-## [基本用法步骤](https://github.com/wukongdaily/AutoBuildImmortalWrt/wiki) 👈🏻
-1、fork本项目<br>
-2、在fork后的项目中 点击【action】 找到需要的工作流后 run-workflow<br>
+## 固件内容
 
-## 虚拟机建议用哪条工作流？下图↓
-<img width="30%" height="30%" alt="image" src="https://github.com/user-attachments/assets/743027e0-584a-4842-bfb3-0dff22de9101" /> <br>
-虚拟机用户建议直接构建ISO镜像 此过程分2个阶段 阶段一构建固件imm 阶段二将其封装iso格式的安装器 总计耗时大约7-8分钟  <br>
-ISO在虚拟机引导后 跑码结束后，在命令行输入 `ddd` 按提示 完成虚拟磁盘的写入（安装immortalwrt到虚拟磁盘）<br>
-这样做也比较灵活 避免了格式转换和解压 同时还可以指定安装某个磁盘 而安装后的磁盘剩余空间也能加以利用。<br>
-详细的解说 可以参考我的另一个项目 [img-installer](https://github.com/wukongdaily/armbian-installer) 
+- **防火墙只用 nftables**：firewall4、dnsmasq-full；需要 `iptables` 命令的程序走 `iptables-nft` 兼容层，不含 legacy 版本。
+- **SSH 用 OpenSSH**（去掉了 dropbear），允许 root 用密码登录：先在“系统 → 管理权”设置 root 密码。
+- **默认主题 argon**；apk 软件源为 `https://mirrors.cernet.edu.cn/immortalwrt`。
+- **BBR** 已开启（影响路由器本机和容器的 TCP），sysctl 按路由器场景调整，见 [90-router.conf](build/files/etc/sysctl.d/90-router.conf)。流量卸载模块已装但默认关闭；UPnP 已装但默认关闭。
+- **插件**：irqbalance、vnstat2、lldpd、pbr、UPnP、网络唤醒、NUT（UPS，含通用 USB 驱动）、timecontrol（上网时间控制）、磁盘管理、文件管理、网页终端，均为中文界面。
+- **VPN（客户端为主）**：WireGuard、SoftEther 客户端、OpenVPN。
+- **Docker**：清华 TUNA 镜像上的最新官方静态版本（构建时获取），加 Docker Compose 插件；使用 nftables 防火墙后端，日志为 json-file、每个容器最多 500M（100M × 5），数据在 `/data/docker`。
+- **DPanel**：最新社区版，开机自启，`http://<LAN 地址>:8086`，LuCI 菜单“服务 → DPanel”可直接跳转。数据在 `/data/dpanel`。
 
-## 虚拟机用户使用的教学⬇️ ISO 
-[![操作步骤](https://img.shields.io/badge/YouTube-123456?logo=youtube&labelColor=ff0000)](https://www.youtube.com/watch?v=ftSE3wSJi64) [![Bilibili](https://img.shields.io/badge/Bilibili-123456?logo=bilibili&logoColor=fff&labelColor=fb7299)](https://www.bilibili.com/video/BV1enxMzwEUe/) <br>
-【绿联NAS安装immortalwrt25.12】https://www.bilibili.com/video/BV1AyZcBsErt/
+## 首次启动做了什么
 
-## 物理机如何使用ISO格式的安装器(本项目独有)
-- Windows 建议将ISO拷贝到制作好的[Ventoy](https://www.ventoy.net/cn/index.html)<br>
-  <img width="303" height="90" alt="image" src="https://github.com/user-attachments/assets/34d73e24-3100-4c0d-a904-5f114d867793" />
+首次启动的设置都写在 `/etc/uci-defaults/` 下的脚本里，用 `logread -e custom-init` 查看每一步的结果。
 
-- macOS 使用[balenaEtcher](https://etcher.balena.io/) 将ISO 刻录到U盘即可<br>
-  <img width="285" height="188" alt="image" src="https://github.com/user-attachments/assets/cd09be82-2670-404c-8878-c2782b3c8374" />
+### 数据盘 `/data`
 
-- 将制作好的U盘提前插在软路由 然后启动后 按Del 或者F12、F11、F7等 使U盘成为第一启动盘
+硬盘比固件大（剩余 ≥ 1 GiB）时，剩余空间自动做成 ext4 分区挂载到 `/data`。重刷固件后如果那块空间里已有文件系统，不会重新格式化。
 
-  <img width="50%" alt="image" src="https://github.com/user-attachments/assets/a1ba38d9-305c-41dd-8441-9e61c3dcae1d" /> <br>
-- 启动后在命令行输入 ddd 按提示 完成硬盘的写入 硬盘剩余空间你还可以自动分配<br>
-- ISO安装器原理 点这里查看 https://github.com/wukongdaily/img-installer
-- [视频教学参考 精准空降到 13:46 ](https://www.bilibili.com/video/BV1DQXVYFENr/?share_source=copy_web&vd_source=0bb92241fb28a55c32c2e5132116b594&t=826)
-- 这是一个值得推广的方法 真心希望你能吸收、学会 费了很大心思的。没错、从今往后 [任何OpenWrt都有安装器了](https://github.com/wukongdaily/img-installer)
+### 网口
 
-## 如何查询imm仓库内有哪些插件
-https://mirrors.sjtug.sjtu.edu.cn/immortalwrt/releases/24.10.4/packages/x86_64/luci/
-## 如何查询imm仓库外目前可以集成哪些插件
-https://github.com/wukongdaily/store
-> 具体方法 https://github.com/wukongdaily/AutoBuildImmortalWrt/discussions/209
-## 【视频教程】如何集成第三方插件？
-https://www.youtube.com/watch?v=KN6AJYV1hBI <br>
-https://www.youtube.com/watch?v=7i6BQeitUtE
+- **恰好有 2 个 2.5G 网口**（按最高速率判断，1G、10G 口不算）时进入接口定制模式：
+  - 第 1 个 2.5G 口是 **WAN**，PPPoE 拨号：到“网络 → 接口 → wan”填写账号密码；
+  - 第 2 个 2.5G 口直接作为 **LAN**（没有 br-lan 网桥）；
+  - 其余网口只启用链路，不分配地址、不加入防火墙区域。
+- 其他机器保持官方布局：eth0 在 br-lan 里作 LAN，eth1 作 WAN（DHCP）。
+- **IPv6**：只有路由器 WAN 侧获取一个 IPv6 地址；局域网不分配 IPv6（不发 RA，不开 DHCPv6）。
 
-## 旁路由的用户必读
-近期不少用户修改配置文件中的默认ip地址，误认为这个工作流可以直接设置旁路ip。这是巨大的误解，这样设置就乱套了。<br>
-旁路的逻辑应该是单网口模式。根据下面的固件属性可知。单网口默认采取`dhcp模式`，用户应当自行在上一级路由器查看给imm路由器分配的ip地址。
-然后通过该ip来访问imm后台页面，在imm后台页面中，根据自己主路由的网段 自行配置旁路的ip地址。
+### DNS 与 DHCP
 
-## 正常路由模式必读
-所谓正常的路由模式 就是指多网口用户，多网口的意思就是2个或者2个以上网口的情况。<br>
-一般wan用于拨号或者自动获取ip <br>
-而其他lan一般是给其他设备分配dhcp<br>
-这种情况下 你可以修改路由器的默认ip  `192.168.100.1` 比如你可以修改为`192.168.80.1 ` 诸如此类。<br>
-没错，修改此ip 无非就是为了避免跟光猫或者跟家庭中的其他路由器网段冲突。大多数用户，无需更改。
+- 上游 DNS 只用 `123.123.123.123` 和 `114.114.114.114`（不用运营商下发的 DNS），开启缓存，关闭重绑定保护。
+- DHCP 地址池 `.50`–`.200`，网关与 DNS 都是路由器。
+- **kexue 标签**：在“网络 → DHCP/DNS → 静态地址分配”中给设备选择标签 `kexue`，它拿到的网关就是 `x.x.x.2`（DNS 仍是路由器）。
 
-## 该固件默认属性？(必读)
-- 该固件刷入【单网口设备】默认采用DHCP模式,自动获得ip。类似NAS的做法
-- 该固件刷入【多网口设备】默认WAN口采用DHCP模式，LAN 口ip为  `192.168.100.1` <br>其中eth0为WAN 其余网口均为LAN
-- 若用户在工作流中勾选了拨号信息 则WAN口模式为pppoe拨号模式。
-- 建议拨号用户使用之前重启一次光猫。
-- 综合上述特点，【单网口设备】应该先接路由器，先在上级路由器查看一下它的ip 再访问。
-- 上述特点 你都可以通过 `99-custom.sh` 配置和调整
+### 地址规划（以 10.214.37.1 为例）
 
-## 特别说明
-本项目构建的固件 为了易用性 wan口防火墙规则入站 是开启的，待首次调试完毕后，建议自行关闭。操作方法如下
-网络——防火墙—— wan 的入站 选择拒绝 然后保存并应用即可。更多讨论[ 请参考这个话题](https://github.com/wukongdaily/AutoBuildImmortalWrt/discussions/341)
-<img width="3860" height="870" alt="image" src="https://github.com/user-attachments/assets/d826bccd-f0df-4d4a-877d-b711b81fcf1a" />
-同时此项设置的相关代码详见 `files/etc/uci-defaults/99-custom.sh` 行首
+| 地址 | 用途 |
+| --- | --- |
+| 10.214.37.1 | 路由器 |
+| 10.214.37.2 – .7 | 固定 IP 的 macvlan 容器，用 `--ip` 指定（.2 是 kexue 网关） |
+| 10.214.37.8 – .15 | macvlan 容器自动分配 |
+| 10.214.37.16 – .49 | 有线设备静态 IP |
+| 10.214.37.50 – .200 | DHCP 地址池 |
+| 10.214.37.201 – .254 | 有线设备静态 IP |
 
-## ❤️其它GitHub Action项目推荐🌟 （建议收藏）⬇️
-- ### [一键生成run插件] 🆕
-- https://github.com/wukongdaily/RunFilesBuilder<br>
-- ### [一键生成docker离线镜像] 🆕
-- https://github.com/wukongdaily/DockerTarBuilder<br>
-- ### [OpenWrt/Armbian IMG安装器ISO] 🆕
-- https://github.com/wukongdaily/img-installer
+### Docker 网络与防火墙
 
+- macvlan 网络 `lan_macvlan`：子网为 LAN 网段，网关为 LAN 地址，开机后自动创建。容器直接出现在局域网里：
 
-## ❤️如何构建docker版ImmortalWrt（建议收藏）⬇️
-https://wkdaily.cpolar.cn/15
-# 🎉鸣谢
+  ```bash
+  docker run -d --network lan_macvlan --ip 10.214.37.2 <镜像>
+  ```
 
-感谢以下项目与作者对本项目的贡献与灵感 ❤️
+  Docker 无法关闭网络内的自动分配，所以自动分配被限制在 `.8`–`.15`；需要固定地址的容器用 `--ip`。
+- **shim 接口** `macvlan_shim`（加入 lan 防火墙区域）让路由器与 macvlan 容器互通，`x.x.x.0/28` 的路由走它。
+- 防火墙区域 `docker` 包含 `docker0` 与 Compose/DPanel 创建的 `br-xxxx` 网桥：允许容器访问外网和局域网、局域网访问容器；**公网不能直接访问容器**，需要时自己加端口转发规则。
 
-<div align="left">
+### 升级
 
-<a href="https://github.com/immortalwrt"><img src="https://avatars.githubusercontent.com/immortalwrt?v=4&s=80" width="80" height="80" alt="immortalwrt" /></a>
-<a href="https://github.com/Openwrt-Passwall"><img src="https://avatars.githubusercontent.com/Openwrt-Passwall?v=4&s=80" width="80" height="80" alt="Openwrt-Passwall" /></a>
-<a href="https://github.com/sirpdboy"><img src="https://avatars.githubusercontent.com/sirpdboy?v=4&s=80" width="80" height="80" alt="sirpdboy" /></a>
-<a href="https://github.com/ophub"><img src="https://avatars.githubusercontent.com/ophub?v=4&s=80" width="80" height="80" alt="ophub" /></a>
-<a href="https://github.com/linkease"><img src="https://avatars.githubusercontent.com/linkease?v=4&s=80" width="80" height="80" alt="linkease" /></a>
+保留配置升级（sysupgrade）后，网口、DNS/DHCP、防火墙等设置不会被重新初始化，你填写的 PPPoE 账号等都会保留；恢复出厂设置后会按上面的规则重新初始化。Docker 和 DPanel 随固件升级：重新构建固件即可，`apk upgrade` 不会改动它们。
 
-<a href="https://github.com/coolsnowwolf"><img src="https://avatars.githubusercontent.com/coolsnowwolf?v=4&s=80" width="80" height="80" alt="coolsnowwolf" /></a>
-<a href="https://github.com/stackia"><img src="https://avatars.githubusercontent.com/stackia?v=4&s=80" width="80" height="80" alt="stackia" /></a>
-<a href="https://github.com/kiddin9"><img src="https://avatars.githubusercontent.com/kiddin9?v=4&s=80" width="80" height="80" alt="kiddin9" /></a>
-<a href="https://github.com/sbwml"><img src="https://avatars.githubusercontent.com/sbwml?v=4&s=80" width="80" height="80" alt="sbwml" /></a>
-<a href="https://github.com/kenzok8"><img src="https://avatars.githubusercontent.com/kenzok8?v=4&s=80" width="80" height="80" alt="kenzok8" /></a>
+## 自定义
 
-<a href="https://github.com/timsaya"><img src="https://avatars.githubusercontent.com/timsaya?v=4&s=80" width="80" height="80" alt="timsaya" /></a>
-<a href="https://github.com/AdguardTeam"><img src="https://avatars.githubusercontent.com/AdguardTeam?v=4&s=80" width="80" height="80" alt="AdguardTeam" /></a>
-<a href="https://github.com/Thaolga"><img src="https://avatars.githubusercontent.com/Thaolga?v=4&s=80" width="80" height="80" alt="Thaolga" /></a>
-<a href="https://github.com/eamonxg"><img src="https://avatars.githubusercontent.com/eamonxg?v=4&s=80" width="80" height="80" alt="eamonxg" /></a>
-<a href="https://github.com/nikkinikki-org"><img src="https://avatars.githubusercontent.com/nikkinikki-org?v=4&s=80" width="80" height="80" alt="nikkinikki-org" /></a>
+| 想改什么 | 改哪里 |
+| --- | --- |
+| 软件包 | [build/packages.txt](build/packages.txt) |
+| 镜像格式、GRUB、分区大小 | [build/config.override](build/config.override) |
+| 首次启动的设置 | [build/files/etc/uci-defaults/](build/files/etc/uci-defaults/) |
+| Docker 配置 | [build/templates/daemon.json.in](build/templates/daemon.json.in)（`@LAN_IP@` 在构建时替换；固件内为 `/etc/docker/daemon.json`） |
+| 往固件里放任意文件 | 放到 `build/files/` 下对应的路径 |
 
-<a href="https://github.com/gdy666"><img src="https://avatars.githubusercontent.com/gdy666?v=4&s=80" width="80" height="80" alt="gdy666" /></a>
-<a href="https://github.com/lwb1978"><img src="https://avatars.githubusercontent.com/lwb1978?v=4&s=80" width="80" height="80" alt="lwb1978" /></a>
-<a href="https://github.com/Tokisaki-Galaxy"><img src="https://avatars.githubusercontent.com/Tokisaki-Galaxy?v=4&s=80" width="80" height="80" alt="Tokisaki-Galaxy" /></a>
-<a href="https://github.com/QiuSimons"><img src="https://avatars.githubusercontent.com/QiuSimons?v=4&s=80" width="80" height="80" alt="QiuSimons" /></a>
-<a href="https://xz.vumstar.com/"><img src="https://xz.vumstar.com/static/img/logo.png" width="80" height="80" alt="wukongdaily" /></a>
+修改脚本后在本机运行测试（需要 POSIX sh；有 `sfdisk` 时会真实演练数据分区）：
 
-</div>
+```bash
+sh tests/run.sh
+```
 
-## ❤️赞助作者 ⬇️⬇️
+## 已知限制
 
-<a href="https://wkdaily.cpolar.top/01" target="_blank">
-  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-       alt="Buy Me A Coffee"
-       style="width:15%; height:auto;">
-</a>
+- 运营商只下发前缀（PD）、不给 WAN 地址时，路由器本身拿不到公网 IPv6。
+- 修改 LAN 地址后，需要同步修改 `/etc/docker/daemon.json` 的 `dns`，并删除重建 `lan_macvlan` 网络（`docker network rm lan_macvlan && /etc/init.d/lan-macvlan restart`）。`daemon.json` 在保留配置升级时会保留。
+- 修改 [config.override](build/config.override) 的根分区大小后重刷，硬盘分区布局会改变，`/data` 会在新位置重新建立，**原有数据会丢失**，请先备份。
+- Docker 使用官方静态二进制，**不要再安装** `dockerd`、`docker` 或依赖它们的 `luci-app-dockerman`，否则会与固件里的 Docker 冲突。容器管理请用 DPanel。

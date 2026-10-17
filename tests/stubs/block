@@ -1,0 +1,12 @@
+#!/bin/sh
+# 测试用的伪 block：`block info [设备]` 输出 $BLOCK_INFO 文件内容（可按设备过滤）
+case "$1" in
+	info)
+		if [ -n "$2" ]; then
+			grep "^$2:" "${BLOCK_INFO:-/dev/null}"
+		else
+			cat "${BLOCK_INFO:-/dev/null}"
+		fi
+		;;
+esac
+exit 0

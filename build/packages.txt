@@ -1,0 +1,49 @@
+# 固件集成的软件包（ImmortalWrt x86-64 / apk）
+# 一行可写多个包，# 之后为注释；包名前加 "-" 表示从官方默认包中去掉。
+# 官方源以外的包（timecontrol）由 build/fetch-extras.sh 下载到本地软件源。
+# 查询官方源：https://downloads.immortalwrt.org/releases/<版本>/packages/x86_64/luci/
+
+# ---------- 去掉的默认包 ----------
+-dropbear                     # 改用 OpenSSH
+-dnsmasq                      # 改用 dnsmasq-full
+
+# ---------- 基础 ----------
+curl ca-bundle
+openssh-server openssh-sftp-server
+default-settings-chn luci-i18n-base-zh-cn            # ImmortalWrt 中文默认设置（时区、apk 镜像）
+luci-i18n-firewall-zh-cn
+luci-i18n-package-manager-zh-cn
+luci-i18n-diskman-zh-cn
+luci-i18n-filemanager-zh-cn
+luci-i18n-ttyd-zh-cn
+luci-theme-argon luci-app-argon-config luci-i18n-argon-config-zh-cn
+
+# ---------- 防火墙：只用 nftables ----------
+firewall4 nftables-json dnsmasq-full
+iptables-nft ip6tables-nft    # 需要 iptables 命令的程序走 nftables 兼容层，不装 legacy 版本
+
+# ---------- 内核模块 ----------
+kmod-tcp-bbr                  # BBR 拥塞控制
+kmod-nft-offload kmod-nf-flow # 流量卸载（已安装，默认不启用）
+kmod-macvlan kmod-veth        # Docker 网络、macvlan shim
+kmod-nf-conntrack-netlink     # Docker 端口映射清理连接跟踪
+kmod-fs-ext4                  # /data 数据分区
+
+# ---------- 数据分区与网口识别 ----------
+sfdisk partx-utils e2fsprogs block-mount
+ethtool
+
+# ---------- 进阶 ----------
+luci-i18n-irqbalance-zh-cn    # 中断均衡
+luci-i18n-vnstat2-zh-cn       # 流量统计
+luci-i18n-lldpd-zh-cn         # LLDP
+luci-i18n-pbr-zh-cn           # 策略路由
+miniupnpd-nftables luci-i18n-upnp-zh-cn   # UPnP（默认不启用）
+luci-i18n-wol-zh-cn           # 网络唤醒
+luci-i18n-nut-zh-cn nut-driver-usbhid-ups # UPS 管理 + 通用 USB UPS 驱动
+luci-app-timecontrol luci-i18n-timecontrol-zh-cn # 上网时间控制（sirpdboy，nftables 版，GitHub 下载）
+
+# ---------- VPN（以客户端为主）----------
+luci-proto-wireguard                         # WireGuard（在“网络-接口”中添加）
+luci-app-softether luci-i18n-softether-zh-cn # SoftEther 客户端（不用 luci-app-softethervpn，它会带上服务端）
+openvpn-openssl luci-i18n-openvpn-zh-cn      # OpenVPN（客户端与服务端是同一个程序）

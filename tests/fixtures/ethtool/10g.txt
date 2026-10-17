@@ -1,0 +1,14 @@
+Settings for eth1:
+	Supported ports: [ TP ]
+	Supported link modes:   100baseT/Full
+	                        1000baseT/Full
+	                        10000baseT/Full
+	                        2500baseT/Full
+	                        5000baseT/Full
+	Supported pause frame use: Symmetric Receive-only
+	Supports auto-negotiation: Yes
+	Advertised link modes:  100baseT/Full
+	                        1000baseT/Full
+	                        2500baseT/Full
+	Speed: 2500Mb/s
+	Link detected: yes

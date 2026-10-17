@@ -1,0 +1,10 @@
+#!/bin/sh
+# 首次启动的最后一步：写入“已初始化”标记。
+# 标记通过 /lib/upgrade/keep.d/custom 在保留配置升级时保留，
+# 之后 20~50 号脚本不会再改动配置；恢复出厂设置后标记消失，会重新初始化。
+. "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
+if ! custom_is_provisioned; then
+	touch "$CUSTOM_MARKER"
+	custom_log "provisioning finished"
+fi
+exit 0
