@@ -30,11 +30,14 @@ fi
 
 GPT_LINUX=0FC63DAF-8483-4772-8E79-3D69D8477DE4
 
-# 仿照 OpenWrt combined-efi 的布局：p128 BIOS boot、p1 引导分区、p2 rootfs
+# 仿照 OpenWrt combined-efi 的布局：p128 BIOS boot、p1 引导分区、p2 rootfs。
+# first-lba 必须写明 34（与 OpenWrt 的 ptgen 一致）：不写时 sfdisk 新建 GPT 默认按对齐取 2048，
+# 34 和 512 扇区上的分区会被拒绝，整个分区表建不出来
 make_image() {
 	truncate -s 300M "$1"
-	sfdisk -q "$1" >/dev/null <<EOF
+	sfdisk -q "$1" >/dev/null <<EOF || fail "构造测试磁盘镜像失败（sfdisk 拒绝了分区表）"
 label: gpt
+first-lba: 34
 ${1}1 : start=512, size=131072, type=C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 ${1}2 : start=131584, size=262144, type=$GPT_LINUX
 ${1}128 : start=34, size=478, type=21686148-6449-6E6F-744E-656564454649
