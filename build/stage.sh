@@ -1,6 +1,6 @@
 #!/bin/sh
 # 组装固件根目录覆盖层：build/files + 下载的二进制 + 按 LAN 地址渲染的配置。
-# 用法：build/stage.sh <fetch-extras 输出目录> <LAN 地址> <输出目录> [使用定制网口配置 true|false]
+# 用法：build/stage.sh <fetch-extras 输出目录> <LAN 地址> <输出目录> [使用定制配置 true|false]
 
 # bool_flag <值>：把 Action 的勾选结果（true/false）转成 build.conf 用的 1/0，无法识别时返回 1
 bool_flag() {
@@ -35,8 +35,8 @@ main() {
 	extras=${1:?用法：build/stage.sh <下载目录> <LAN 地址> <输出目录>}
 	lan_ip=${2:?缺少 LAN 地址}
 	out=${3:?缺少输出目录}
-	if ! custom_ports=$(bool_flag "${4:-false}"); then
-		echo "::error::使用定制网口配置 的值无法识别：'$4'（应为 true 或 false）"
+	if ! custom_config=$(bool_flag "${4:-false}"); then
+		echo "::error::使用定制配置 的值无法识别：'$4'（应为 true 或 false）"
 		exit 1
 	fi
 	here=$(cd "$(dirname "$0")" && pwd)
@@ -65,11 +65,11 @@ main() {
 	patch_dpanel_config "$out/etc/dpanel/config.yaml" ||
 		echo "::warning::DPanel config.yaml 中没有找到 prof.host，性能分析端口 8087 仍监听 0.0.0.0"
 
-	# 构建信息：首次启动脚本读取 LAN_IP、CUSTOM_PORTS，dpanel 服务读取 DPANEL_VERSION
+	# 构建信息：首次启动脚本读取 LAN_IP、CUSTOM_CONFIG，dpanel 服务读取 DPANEL_VERSION
 	mkdir -p "$out/etc/custom"
 	{
 		echo "LAN_IP='$lan_ip'"
-		echo "CUSTOM_PORTS='$custom_ports'"
+		echo "CUSTOM_CONFIG='$custom_config'"
 		cat "$extras/versions.env"
 		echo "BUILD_DATE='$(date -u '+%Y-%m-%dT%H:%M:%SZ')'"
 	} > "$out/etc/custom/build.conf"

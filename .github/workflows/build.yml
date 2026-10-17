@@ -13,8 +13,8 @@ on:
         required: true
         default: "10.214.37.1"
         type: string
-      custom_ports:
-        description: "使用定制网口配置（WAN 用 PPPoE、LAN 直连网口；优先 2 个 2.5G 口，否则 eth0=WAN、eth1=LAN）"
+      custom_config:
+        description: "使用定制配置：网口（PPPoE WAN、LAN 直连；优先 2 个 2.5G 口，否则 eth0/eth1）、Docker macvlan、局域网不用 IPv6、kexue 标签"
         required: false
         default: true
         type: boolean
@@ -60,7 +60,7 @@ jobs:
     env:
       VERSION: ${{ inputs.version }}
       LAN_IP: ${{ inputs.lan_ip }}
-      CUSTOM_PORTS: ${{ inputs.custom_ports }}
+      CUSTOM_CONFIG: ${{ inputs.custom_config }}
       RELEASE_TAG: x86-64-${{ inputs.version }}
     steps:
       - name: Checkout
@@ -81,7 +81,7 @@ jobs:
         run: sh build/fetch-extras.sh "$RUNNER_TEMP/extras"
 
       - name: 组装固件覆盖层
-        run: sh build/stage.sh "$RUNNER_TEMP/extras" "$LAN_IP" "$RUNNER_TEMP/files" "$CUSTOM_PORTS"
+        run: sh build/stage.sh "$RUNNER_TEMP/extras" "$LAN_IP" "$RUNNER_TEMP/files" "$CUSTOM_CONFIG"
 
       - name: 构建固件
         run: |
@@ -118,13 +118,15 @@ jobs:
             echo
             echo "### 首次启动"
             echo
-            if [ "$CUSTOM_PORTS" = "true" ]; then
-              echo "- **网口：定制配置**：恰好有 2 个 2.5G 网口时用这两个，否则用 eth0、eth1。前一个为 WAN（PPPoE，在 **网络 → 接口 → wan** 填写账号密码），后一个直接作为 LAN，其余网口不分配；只有 1 个网口时保持官方布局。"
+            if [ "$CUSTOM_CONFIG" = "true" ]; then
+              echo "- **定制配置：已启用**"
+              echo "  - 网口：恰好有 2 个 2.5G 网口时用这两个，否则用 eth0、eth1。前一个为 WAN（PPPoE，在 **网络 → 接口 → wan** 填写账号密码），后一个直接作为 LAN，其余网口不分配；只有 1 个网口时保持官方布局。"
+              echo "  - 局域网不使用 IPv6；路由器 WAN 侧获取一个 IPv6 地址。"
+              echo "  - Docker macvlan 网络 \`lan_macvlan\` 与 shim 接口；DHCP 标签 \`kexue\` 下发网关 ${p}.2。"
             else
-              echo "- **网口：官方布局**：eth0 为 LAN（br-lan），eth1 为 WAN（DHCP）。"
+              echo "- **定制配置：未启用**：网口为官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN 用 DHCP），IPv6 保持官方默认，不建 macvlan 网络和 kexue 标签。"
             fi
             echo "- 硬盘剩余空间（≥ 1 GiB）自动格式化为 ext4 并挂载到 \`/data\`，Docker 数据在 \`/data/docker\`。"
-            echo "- 局域网不使用 IPv6；路由器 WAN 侧获取一个 IPv6 地址。"
             echo "- 初始化日志：\`logread -e custom-init\`"
             echo
             echo "### 地址规划"
@@ -132,10 +134,14 @@ jobs:
             echo "| 地址 | 用途 |"
             echo "| --- | --- |"
             echo "| ${p}.1 | 路由器 |"
-            echo "| ${p}.2 – ${p}.7 | 固定 IP 的 macvlan 容器（\`--ip\`；${p}.2 为 kexue 标签的网关） |"
-            echo "| ${p}.8 – ${p}.15 | macvlan 容器自动分配（网络 \`lan_macvlan\`） |"
+            if [ "$CUSTOM_CONFIG" = "true" ]; then
+              echo "| ${p}.2 – ${p}.7 | 固定 IP 的 macvlan 容器（\`--ip\`；${p}.2 为 kexue 标签的网关） |"
+              echo "| ${p}.8 – ${p}.15 | macvlan 容器自动分配（网络 \`lan_macvlan\`） |"
+              echo "| ${p}.16 – ${p}.49、${p}.201 – ${p}.254 | 有线设备静态 IP |"
+            else
+              echo "| ${p}.2 – ${p}.49、${p}.201 – ${p}.254 | 有线设备静态 IP |"
+            fi
             echo "| ${p}.50 – ${p}.200 | DHCP 地址池 |"
-            echo "| ${p}.16 – ${p}.49、${p}.201 – ${p}.254 | 有线设备静态 IP |"
             echo
             echo "### 文件"
             echo

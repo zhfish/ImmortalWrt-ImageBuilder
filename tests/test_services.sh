@@ -7,12 +7,14 @@ CREATE="network create -d macvlan --subnet 10.214.37.0/24 --gateway 10.214.37.1 
 
 # a) 网络不存在：按 LAN 设置创建
 setup_env
+custom_config 1
 uci -q set network.lan.device=eth2
 DOCKER_NET_EXISTS=0 sh "$M" || fail "a: 退出码非 0"
 assert_file_contains "$DOCKER_LOG" "$CREATE" "a: 创建 lan_macvlan"
 
 # b) 已存在且一致：不重建、不告警
 setup_env
+custom_config 1
 uci -q set network.lan.device=eth2
 DOCKER_NET_EXISTS=1 DOCKER_NET_DESC='10.214.37.0/24 eth2' sh "$M"
 grep -q "network create" "$DOCKER_LOG" && fail "b: 已存在时不应创建"
@@ -20,6 +22,7 @@ grep -q "lan_macvlan" "$LOG_FILE" && fail "b: 一致时不应告警"
 
 # c) 已存在但与 LAN 不一致：只告警，不重建
 setup_env
+custom_config 1
 uci -q set network.lan.device=eth2
 DOCKER_NET_EXISTS=1 DOCKER_NET_DESC='192.168.1.0/24 br-lan' sh "$M"
 grep -q "network create" "$DOCKER_LOG" && fail "c: 不一致时也不应重建"
@@ -27,10 +30,19 @@ assert_file_contains "$LOG_FILE" "lan_macvlan" "c: 记录不一致告警"
 
 # d) Docker 一直没就绪：超时退出，不创建
 setup_env
+custom_config 1
 uci -q set network.lan.device=eth2
 DOCKER_INFO_RC=1 DOCKER_WAIT=2 sh "$M" || fail "d: 超时也应退出 0"
 grep -q "network create" "$DOCKER_LOG" && fail "d: Docker 未就绪时不应创建"
 assert_file_contains "$LOG_FILE" "timeout" "d: 记录超时"
+
+# g) 关闭定制配置：不创建 lan_macvlan，也不访问 Docker
+setup_env
+custom_config 0
+uci -q set network.lan.device=eth2
+DOCKER_NET_EXISTS=0 sh "$M" || fail "g: 退出码非 0"
+assert_eq "" "$(cat "$DOCKER_LOG")" "g: 关闭时不调用 docker"
+assert_file_contains "$LOG_FILE" "disabled" "g: 日志说明已关闭"
 
 # e/f 需要 jq（busybox 镜像里没有，Ubuntu 上的 dash 运行会覆盖）
 if command -v jq >/dev/null 2>&1; then

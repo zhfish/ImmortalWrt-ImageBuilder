@@ -3,8 +3,13 @@
 #   子网 = LAN 网段 x.x.x.0/24，网关 = LAN 地址 x.x.x.1，父接口 = LAN 的三层设备
 #   自动分配段 x.x.x.8/29（x.x.x.8-15）；需要固定地址的容器用 --ip 指定 x.x.x.2-7
 # 网络已存在时不重建（可能有容器在用）；与当前 LAN 不一致时只记日志。
+# 只在构建时勾选了“使用定制配置”时创建（与 macvlan shim 一致）。
 . "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
 custom_load_conf
+if ! custom_enabled; then
+	custom_log "macvlan: custom config disabled in build, lan_macvlan not created"
+	exit 0
+fi
 
 NET=lan_macvlan
 WAIT=${DOCKER_WAIT:-120}

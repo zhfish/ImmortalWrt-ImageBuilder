@@ -1,21 +1,22 @@
 #!/bin/sh
 # 首次启动：网口模式、WAN/LAN 与 IPv6（只在未初始化时执行）
 #
-# 接口定制模式：构建时在 Action 里勾选“使用定制网口配置”（CUSTOM_PORTS=1），且至少有 2 个物理网口
+# 接口定制模式：构建时在 Action 里勾选“使用定制配置”（CUSTOM_CONFIG=1），且至少有 2 个物理网口
 #   WAN/LAN 网口：恰好有 2 个最高速率为 2.5G 的网口时用这两个（1G、5G、10G 口都不算），
 #                否则按顺序用前两个网口（eth0、eth1）
 #   WAN：PPPoE，账号密码在 LuCI 中填写
 #   LAN：直接使用该网口，不建 br-lan 网桥
 #   其余物理网口：只启用链路（只有 IPv6 link-local 地址），不加入任何防火墙区域
 # 默认模式（未勾选，或网口不足 2 个）：保持官方布局（eth0 在 br-lan 作 LAN，eth1 作 WAN 用 DHCP），只修改 LAN 地址
-# 两种模式：只有路由器 WAN 侧获取一个 IPv6 地址，局域网不使用 IPv6
+# IPv6：勾选“使用定制配置”时只有路由器 WAN 侧获取一个 IPv6 地址，局域网不使用 IPv6；
+#       未勾选时保持 ImmortalWrt 默认
 . "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
 custom_is_provisioned && exit 0
 custom_load_conf
 
 mode=default
-if [ "${CUSTOM_PORTS:-0}" != 1 ]; then
-	reason="custom ports disabled in build"
+if ! custom_enabled; then
+	reason="custom config disabled in build"
 else
 	ports=$(phys_ports)
 	speeds=""
@@ -82,10 +83,13 @@ else
 fi
 
 # IPv6：局域网不分配前缀、不用 ULA；WAN 只要地址不要前缀，不用运营商 DNS
-uci -q delete network.lan.ip6assign
-uci -q delete network.globals.ula_prefix
-uci -q set network.wan6.reqaddress=try
-uci -q set network.wan6.reqprefix=no
-uci -q set network.wan6.peerdns=0
+if custom_enabled; then
+	uci -q delete network.lan.ip6assign
+	uci -q delete network.globals.ula_prefix
+	uci -q set network.wan6.reqaddress=try
+	uci -q set network.wan6.reqprefix=no
+	uci -q set network.wan6.peerdns=0
+	custom_log "network: IPv6 only on WAN, none on LAN"
+fi
 uci commit network
 exit 0

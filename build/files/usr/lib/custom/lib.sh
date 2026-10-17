@@ -11,12 +11,18 @@ custom_log() {
 	logger -t custom-init "$*"
 }
 
-# 读取构建时写入的配置，得到 LAN_IP 和 LAN_PREFIX（前三段）
+# 读取构建时写入的配置，得到 LAN_IP、LAN_PREFIX（前三段）和 CUSTOM_CONFIG
 custom_load_conf() {
+	CUSTOM_CONFIG=
 	# shellcheck disable=SC1090
 	. "$CUSTOM_CONF"
 	# shellcheck disable=SC2034  # 供调用者使用
 	LAN_PREFIX=$(lan_prefix "$LAN_IP")
+}
+
+# 构建时是否勾选了“使用定制配置”（网口、macvlan、IPv6、kexue 标签），需先 custom_load_conf
+custom_enabled() {
+	[ "${CUSTOM_CONFIG:-0}" = 1 ]
 }
 
 # 是否已经初始化过（保留配置升级后标记文件仍在）

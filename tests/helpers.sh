@@ -61,6 +61,11 @@ setup_env() {
 	: > "$DOCKER_LOG"
 }
 
+# custom_config <1|0>：模拟 Action 里“使用定制配置”的勾选结果（写入 build.conf）
+custom_config() {
+	echo "CUSTOM_CONFIG='$1'" >> "$CUSTOM_CONF"
+}
+
 # 读取伪 uci 状态中的值（列表以空格连接）
 uci_val() {
 	uci -q get "$1"

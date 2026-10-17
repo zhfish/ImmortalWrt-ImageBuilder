@@ -1,9 +1,11 @@
 #!/bin/sh
-# 首次启动：DNS / DHCP（只在未初始化时执行；两种网口模式都生效）
+# 首次启动：DNS / DHCP（只在未初始化时执行）
+# 始终生效：
 #   DNS：只转发到 123.123.123.123 和 114.114.114.114，开启缓存，关闭重绑定保护
 #   DHCP：地址池 x.x.x.50-200，网关和 DNS 都是路由器（x.x.x.1）
-#   标签 kexue：在“静态地址分配”中给设备选择该标签，网关改为 x.x.x.2
+# 勾选“使用定制配置”时才生效（未勾选保持 ImmortalWrt 默认）：
 #   局域网不使用 IPv6：不发 RA、不开 DHCPv6、不做 NDP 代理
+#   标签 kexue：在“静态地址分配”中给设备选择该标签，网关改为 x.x.x.2
 . "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
 custom_is_provisioned && exit 0
 custom_load_conf
@@ -20,15 +22,19 @@ uci -q set dhcp.lan.limit=151
 uci -q delete dhcp.lan.dhcp_option
 uci -q add_list dhcp.lan.dhcp_option="3,$LAN_IP"
 uci -q add_list dhcp.lan.dhcp_option="6,$LAN_IP"
-uci -q set dhcp.lan.ra=disabled
-uci -q set dhcp.lan.dhcpv6=disabled
-uci -q set dhcp.lan.ndp=disabled
+custom_log "dhcp: upstream 123.123.123.123/114.114.114.114, pool $LAN_PREFIX.50-200"
 
-# 设备上的标签选项优先于接口上的选项，所以 kexue 设备拿到的网关是 .2（DNS 仍是 .1）
-uci -q set dhcp.kexue=tag
-uci -q delete dhcp.kexue.dhcp_option
-uci -q add_list dhcp.kexue.dhcp_option="3,$LAN_PREFIX.2"
+if custom_enabled; then
+	uci -q set dhcp.lan.ra=disabled
+	uci -q set dhcp.lan.dhcpv6=disabled
+	uci -q set dhcp.lan.ndp=disabled
+
+	# 设备上的标签选项优先于接口上的选项，所以 kexue 设备拿到的网关是 .2（DNS 仍是 .1）
+	uci -q set dhcp.kexue=tag
+	uci -q delete dhcp.kexue.dhcp_option
+	uci -q add_list dhcp.kexue.dhcp_option="3,$LAN_PREFIX.2"
+	custom_log "dhcp: no IPv6 on LAN, tag kexue -> $LAN_PREFIX.2"
+fi
 
 uci commit dhcp
-custom_log "dhcp: upstream 123.123.123.123/114.114.114.114, pool $LAN_PREFIX.50-200, tag kexue -> $LAN_PREFIX.2"
 exit 0

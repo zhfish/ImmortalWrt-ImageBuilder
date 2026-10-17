@@ -9,6 +9,16 @@ F="$REPO/tests/fixtures"
 # lan_prefix
 assert_eq "10.214.37" "$(lan_prefix 10.214.37.1)" "lan_prefix"
 
+# custom_enabled：build.conf 中 CUSTOM_CONFIG=1 才算开启，缺失视为关闭
+custom_load_conf
+custom_enabled && fail "没有 CUSTOM_CONFIG 时应为关闭"
+custom_config 0
+custom_load_conf
+custom_enabled && fail "CUSTOM_CONFIG=0 时应为关闭"
+custom_config 1
+custom_load_conf
+custom_enabled || fail "CUSTOM_CONFIG=1 时应为开启"
+
 # custom_load_conf
 custom_load_conf
 assert_eq "10.214.37.1" "$LAN_IP" "custom_load_conf LAN_IP"

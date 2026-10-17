@@ -6,6 +6,7 @@ S="$REPO/build/files/etc/uci-defaults/50-custom-docker"
 
 # 默认模式：LAN 是 br-lan
 setup_env
+custom_config 1
 sh "$S" || fail "50-custom-docker 退出码非 0"
 
 assert_eq "zone" "$(uci_val firewall.docker)" "docker 区域"
@@ -50,10 +51,24 @@ assert_eq "docker0 br-+" "$(uci_val firewall.docker.device)" "重复执行设备
 
 # 定制模式：LAN 是网口 eth2
 setup_env
+custom_config 1
 uci -q set network.lan.device=eth2
 : > "$UCI_LOG"
 sh "$S"
 assert_eq "eth2" "$(uci_val network.macvlan_shim_dev.ifname)" "定制模式父接口为 LAN 网口"
+
+# 关闭定制配置：Docker 防火墙区域照常建立，不建 macvlan shim
+setup_env
+custom_config 0
+sh "$S" || fail "关闭时 50-custom-docker 退出码非 0"
+assert_eq "docker0 br-+" "$(uci_val firewall.docker.device)" "关闭时: docker 区域照常建立"
+assert_eq "wan" "$(uci_val firewall.docker_wan.dest)" "关闭时: docker->wan"
+assert_eq "lan" "$(uci_val firewall.docker_lan.dest)" "关闭时: docker->lan"
+assert_eq "docker" "$(uci_val firewall.lan_docker.dest)" "关闭时: lan->docker"
+for k in network.macvlan_shim_dev network.macvlan_shim network.macvlan_shim_route dhcp.macvlan_shim; do
+	uci -q get "$k" >/dev/null && fail "关闭时: 不应创建 $k"
+done
+assert_eq "lan" "$(uci_val firewall.@zone[0].network)" "关闭时: lan 区域不加 shim"
 
 # 已初始化：不写任何配置
 setup_env

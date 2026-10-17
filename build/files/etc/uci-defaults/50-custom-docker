@@ -1,21 +1,17 @@
 #!/bin/sh
 # 首次启动：Docker 防火墙区域与 macvlan shim（只在未初始化时执行）
 #
-# 防火墙区域 docker：docker0 和 Compose/DPanel 创建的 br-xxxx 网桥。
+# 防火墙区域 docker（始终建立，Docker 依赖它才能上网）：docker0 和 Compose/DPanel 创建的 br-xxxx 网桥。
 #   允许 docker->wan、docker->lan、lan->docker；不放行 wan->docker（公网访问容器需自己加规则）。
 #   默认模式下 br-+ 也匹配 br-lan：fw4 先按 lan 区域处理，docker 区域的权限是 lan 的子集，不会放宽 LAN。
 #
-# macvlan shim：让路由器与 lan_macvlan 网络中的容器互通。
+# macvlan shim（勾选“使用定制配置”时才建立）：让路由器与 lan_macvlan 网络中的容器互通。
 #   macvlan 容器发出的 ARP 只能到达同一父接口上的其他 macvlan 设备，到不了父接口本身；
 #   官方默认 arp_ignore=1 只回应目标地址配置在收包接口上的 ARP，所以 shim 也配置 LAN 地址（/32），
 #   容器才能把 LAN 地址当网关。容器地址段 x.x.x.0/28 的路由走 shim。
 . "${CUSTOM_LIBDIR:-/usr/lib/custom}/lib.sh"
 custom_is_provisioned && exit 0
 custom_load_conf
-
-# LAN 的三层设备：定制模式下是 LAN 网口，默认模式下是 br-lan（由 30-custom-network 决定）
-parent=$(uci -q get network.lan.device)
-[ -n "$parent" ] || parent=br-lan
 
 uci -q set firewall.docker=zone
 uci -q set firewall.docker.name=docker
@@ -33,37 +29,44 @@ for f in "docker_wan docker wan" "docker_lan docker lan" "lan_docker lan docker"
 	uci -q set "firewall.$1.src=$2"
 	uci -q set "firewall.$1.dest=$3"
 done
+custom_log "docker: firewall zone docker (docker0, br-+)"
 
-uci -q set network.macvlan_shim_dev=device
-uci -q set network.macvlan_shim_dev.type=macvlan
-uci -q set network.macvlan_shim_dev.name=macvlan-shim
-uci -q set network.macvlan_shim_dev.ifname="$parent"
-uci -q set network.macvlan_shim_dev.mode=bridge
+if custom_enabled; then
+	# LAN 的三层设备：定制模式下是 LAN 网口，默认模式下是 br-lan（由 30-custom-network 决定）
+	parent=$(uci -q get network.lan.device)
+	[ -n "$parent" ] || parent=br-lan
 
-uci -q set network.macvlan_shim=interface
-uci -q set network.macvlan_shim.device=macvlan-shim
-uci -q set network.macvlan_shim.proto=static
-uci -q set network.macvlan_shim.ipaddr="$LAN_IP"
-uci -q set network.macvlan_shim.netmask=255.255.255.255
+	uci -q set network.macvlan_shim_dev=device
+	uci -q set network.macvlan_shim_dev.type=macvlan
+	uci -q set network.macvlan_shim_dev.name=macvlan-shim
+	uci -q set network.macvlan_shim_dev.ifname="$parent"
+	uci -q set network.macvlan_shim_dev.mode=bridge
 
-uci -q set network.macvlan_shim_route=route
-uci -q set network.macvlan_shim_route.interface=macvlan_shim
-uci -q set network.macvlan_shim_route.target="$LAN_PREFIX.0/28"
+	uci -q set network.macvlan_shim=interface
+	uci -q set network.macvlan_shim.device=macvlan-shim
+	uci -q set network.macvlan_shim.proto=static
+	uci -q set network.macvlan_shim.ipaddr="$LAN_IP"
+	uci -q set network.macvlan_shim.netmask=255.255.255.255
 
-# shim 也配置了 LAN 地址，dnsmasq 会把它当作 LAN 网段的接口；不在 shim 上提供 DHCP，避免重复应答
-uci -q set dhcp.macvlan_shim=dhcp
-uci -q set dhcp.macvlan_shim.interface=macvlan_shim
-uci -q set dhcp.macvlan_shim.ignore=1
+	uci -q set network.macvlan_shim_route=route
+	uci -q set network.macvlan_shim_route.interface=macvlan_shim
+	uci -q set network.macvlan_shim_route.target="$LAN_PREFIX.0/28"
 
-if zone=$(uci_zone_index lan); then
-	uci -q del_list "firewall.@zone[$zone].network=macvlan_shim"
-	uci -q add_list "firewall.@zone[$zone].network=macvlan_shim"
-else
-	custom_log "docker: firewall zone lan not found, macvlan_shim not added"
+	# shim 也配置了 LAN 地址，dnsmasq 会把它当作 LAN 网段的接口；不在 shim 上提供 DHCP，避免重复应答
+	uci -q set dhcp.macvlan_shim=dhcp
+	uci -q set dhcp.macvlan_shim.interface=macvlan_shim
+	uci -q set dhcp.macvlan_shim.ignore=1
+
+	if zone=$(uci_zone_index lan); then
+		uci -q del_list "firewall.@zone[$zone].network=macvlan_shim"
+		uci -q add_list "firewall.@zone[$zone].network=macvlan_shim"
+	else
+		custom_log "docker: firewall zone lan not found, macvlan_shim not added"
+	fi
+	custom_log "docker: macvlan shim on $parent ($LAN_IP/32, route $LAN_PREFIX.0/28)"
 fi
 
 uci commit firewall
 uci commit network
 uci commit dhcp
-custom_log "docker: firewall zone docker, macvlan shim on $parent ($LAN_IP/32, route $LAN_PREFIX.0/28)"
 exit 0

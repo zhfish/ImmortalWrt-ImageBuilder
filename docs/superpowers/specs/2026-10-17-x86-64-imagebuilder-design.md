@@ -14,7 +14,7 @@ nftables-only、集成最新 Docker + DPanel、首次启动自动完成数据盘
 
 - Actions 页面只需填 2 个参数即可产出固件并发布 Release。
 - 刷入后首次启动无需手动干预：`/data` 已挂载、Docker 与 DPanel 已运行、macvlan 网络与 shim 已就绪。
-- Action 勾选“使用定制网口配置”（默认）时进入接口定制模式（优先 2 个 2.5G 口，否则 eth0/eth1）；不勾选时保持官方默认网口布局。
+- Action 勾选“使用定制配置”（默认）时启用：接口定制模式（优先 2 个 2.5G 口，否则 eth0/eth1）、Docker macvlan 与 shim、局域网不用 IPv6、kexue 标签；不勾选时这些都保持官方默认。
 - 固件中不含 dropbear、iptables-legacy / xtables-legacy；构建时自动校验。
 
 ## 2. Action 输入
@@ -23,7 +23,7 @@ nftables-only、集成最新 Docker + DPanel、首次启动自动完成数据盘
 | --- | --- | --- |
 | `version` 版本号 | `25.12.2` | `^[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$`，且对应的 `immortalwrt/imagebuilder:x86-64-openwrt-<version>` 镜像存在 |
 | `lan_ip` LAN 地址 | `10.214.37.1` | 必须为 `x.x.x.1`，各段 ≤ 255；掩码固定 /24 |
-| `custom_ports` 使用定制网口配置 | 勾选 | 布尔值，写入 `/etc/custom/build.conf` 的 `CUSTOM_PORTS=1/0` |
+| `custom_config` 使用定制配置 | 勾选 | 布尔值，写入 `/etc/custom/build.conf` 的 `CUSTOM_CONFIG=1/0`；控制网口布局、macvlan/shim、IPv6、kexue 标签 |
 
 下文以 `P` 表示 LAN 前缀（例：`10.214.37`），`P.1` 即 LAN 地址。
 
@@ -152,7 +152,7 @@ combined-efi 镜像为 GPT + BIOS boot 分区，UEFI 与传统 BIOS 均可启动
 
 **网口识别**：遍历 `/sys/class/net/*`，只取物理以太网口（存在 `device`、`type=1`、非无线）。用 `ethtool` 解析 `Supported link modes`，取最高速率；**最高速率恰好 2500 Mb/s** 才算 2.5G 口（10G 口不算，1G 口忽略）。按 ethN 编号排序。
 
-开关：`CUSTOM_PORTS=1`（Action 勾选“使用定制网口配置”）且至少 2 个物理网口时进入接口定制模式；`CUSTOM_PORTS` 为 0 或缺失时不做网口识别，直接用默认模式。
+开关：`CUSTOM_CONFIG=1`（Action 勾选“使用定制配置”）且至少 2 个物理网口时进入接口定制模式；`CUSTOM_CONFIG` 为 0 或缺失时不做网口识别，直接用默认模式，IPv6 也保持官方默认（7.5 的 IPv6 段、7.6 的 RA/DHCPv6/NDP 与 kexue、9.3 的 shim 与 lan_macvlan 都只在开启时设置）。
 
 **选网口**（`pick_custom_ports`）：恰好 2 个 2.5G 口时用这两个，否则按顺序用前两个物理网口（eth0、eth1）。
 
